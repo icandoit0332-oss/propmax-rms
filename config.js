@@ -1,7 +1,7 @@
 // PropMax Requirement Management System — site configuration
 window.PMX_CONFIG = {
   // Paste the Apps Script web-app URL here after deploying (Deploy → New deployment → Web app → copy the /exec URL)
-  scriptUrl: '',
+  scriptUrl: 'https://script.google.com/macros/s/AKfycbzgdCwVktqgCMIx_c5W6rKj3KW36PfB2BUtvS4xJrCeLCQ2oj3ac5DKXZ0b7GuF6PFn/exec',
   // Same Firebase project as the SAP RMS, so everyone signs in with one account
   firebase: {
     apiKey: 'AIzaSyBei-lo6GIehz3UT93xg2KTs5bU_1-4osQ',
