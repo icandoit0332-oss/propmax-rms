@@ -1051,7 +1051,9 @@ async function api(action, payload = {}) {
   const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 60000);
   let res, txt;
   try {
-    res = await fetch(PMX_CONFIG.scriptUrl, {method: 'POST', headers: {'Content-Type': 'text/plain;charset=utf-8'}, body: JSON.stringify({action, idToken: AUTH_TOKEN, ...payload}), signal: ctl.signal});
+    res = action === 'read'
+      ? await fetch(PMX_CONFIG.scriptUrl + '?action=read&idToken=' + encodeURIComponent(AUTH_TOKEN || ''), {signal: ctl.signal})
+      : await fetch(PMX_CONFIG.scriptUrl, {method: 'POST', headers: {'Content-Type': 'text/plain;charset=utf-8'}, body: JSON.stringify({action, idToken: AUTH_TOKEN, ...payload}), signal: ctl.signal});
     txt = await res.text();
   } catch (e) {
     console.error('[PMX] request failed', action, e);
@@ -1065,9 +1067,10 @@ async function loadData(quiet) {
   if (!quiet) { setSync('saving', 'Loading…'); if (!LOADED) $('#app').innerHTML = '<div class="land"><div class="greet">Loading requirements from Google Sheets…</div><p class="mut">The first load of the day can take up to 30 seconds.</p></div>'; }
   try {
     const data = await api('read'); setData(data);
+    try { localStorage.setItem('pmx_cache', JSON.stringify({at: Date.now(), email: ME && ME.email, data})); } catch (e) {}
     setSync('live', `Synced — ${S.reqs.length} records`);
     const who = $('#who'); if (who && ME) { who.hidden = false; who.querySelector('b').textContent = ME.name; who.querySelector('.av').textContent = initials(ME.name); }
-    readHash(); render();
+    if (!quiet || !$('#modal').classList.contains('on')) { readHash(); render(); }
     try { const o = sessionStorage.getItem('odi-open'); if (o && byId(o) && !$('#modal').classList.contains('on')) openDrawer(o); } catch (e) {}
   } catch (err) { setSync('local', 'Not synced'); toast(err.message || 'Could not load data'); if (!LOADED) $('#app').innerHTML = `<div class="land"><h1 class="land-h" style="font-size:28px">Could not load the data</h1><p class="greet">${esc(err.message || '')}</p><p><button class="btn primary" type="button" onclick="loadData()">Try again</button></p></div>`; }
 }
@@ -1079,7 +1082,16 @@ function initAuth() {
   if (!window.PMX_CONFIG || !window.firebase) { setSync('local', 'Setup needed'); $('#app').innerHTML = '<div class="land"><h1 class="land-h">Backend not configured</h1><p class="greet">Add the Apps Script URL to config.js.</p></div>'; return; }
   firebase.initializeApp(PMX_CONFIG.firebase);
   firebase.auth().onAuthStateChanged(u => {
-    if (u) { $('#login').hidden = true; loadData(); }
+    if (u) {
+      $('#login').hidden = true;
+      // show the last synced data instantly, then refresh from Google Sheets in the background
+      let cached = null; try { cached = JSON.parse(localStorage.getItem('pmx_cache') || 'null'); } catch (e) {}
+      if (cached && cached.data && cached.email === (u.email || '').toLowerCase()) {
+        setData(cached.data); readHash(); render(); setSync('saving', 'Updating…');
+        const who = $('#who'); if (who && ME) { who.hidden = false; who.querySelector('b').textContent = ME.name; who.querySelector('.av').textContent = initials(ME.name); }
+        loadData(true);
+      } else loadData();
+    }
     else { ME = null; LOADED = false; $('#who').hidden = true; showLogin(''); }
   });
   const go2 = async kind => {
@@ -1097,7 +1109,7 @@ function initAuth() {
   };
   $('#lIn').onclick = () => go2('in'); $('#lUp').onclick = () => go2('up'); $('#lReset').onclick = () => go2('reset');
   $('#lPass').onkeydown = e => { if (e.key === 'Enter') go2('in'); };
-  $('#signOut').onclick = () => firebase.auth().signOut();
+  $('#signOut').onclick = () => { try { localStorage.removeItem('pmx_cache'); } catch (e) {} firebase.auth().signOut(); };
 }
 (function () {
   let seen = false; try { seen = sessionStorage.getItem('odi-intro') === '1'; sessionStorage.setItem('odi-intro', '1'); } catch (e) {}

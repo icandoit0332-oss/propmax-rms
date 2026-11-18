@@ -60,10 +60,10 @@ function handle_(p) {
     if (!me) return out_({ ok:false, error:'auth', message:'Please sign in again.' });
     switch (p.action) {
       case 'read':    return out_(read_(me));
-      case 'create':  return out_(withLock_(function(){ return create_(me, p); }));
-      case 'update':  return out_(withLock_(function(){ return update_(me, p); }));
-      case 'comment': return out_(withLock_(function(){ return comment_(me, p); }));
-      case 'collab':  return out_(withLock_(function(){ return collab_(me, p); }));
+      case 'create':  return out_(withLock_(function(){ var r = create_(me, p); bust_(); return r; }));
+      case 'update':  return out_(withLock_(function(){ var r = update_(me, p); bust_(); return r; }));
+      case 'comment': return out_(withLock_(function(){ var r = comment_(me, p); bust_(); return r; }));
+      case 'collab':  return out_(withLock_(function(){ var r = collab_(me, p); bust_(); return r; }));
       default:        return out_({ ok:false, error:'action', message:'Unknown action.' });
     }
   } catch (err) {
@@ -116,16 +116,51 @@ function list_(s) { return String(s || '').split('|').map(function(x){ return x.
 function hdrIndex_(row) { var o = {}; row.forEach(function(h, i){ o[String(h).trim()] = i; }); return o; }
 
 // ── READ ────────────────────────────────────────────────────────────
+// ── READ (cached: the whole data set is kept for 2 minutes, cleared on every save) ──
+var CACHE_KEY = 'pmx_core_v1', CACHE_SECS = 120;
+function bust_() { var c = CacheService.getScriptCache(), n = +(c.get(CACHE_KEY + '_n') || 0), k = [CACHE_KEY + '_n']; for (var i = 0; i < n; i++) k.push(CACHE_KEY + '_' + i); c.removeAll(k); }
+function cachedCore_() {
+  var c = CacheService.getScriptCache(), n = +(c.get(CACHE_KEY + '_n') || 0);
+  if (n) {
+    var keys = []; for (var i = 0; i < n; i++) keys.push(CACHE_KEY + '_' + i);
+    var got = c.getAll(keys), parts = keys.map(function(k){ return got[k]; });
+    if (parts.every(function(x){ return x; })) {
+      try { return JSON.parse(Utilities.ungzip(Utilities.newBlob(Utilities.base64Decode(parts.join('')), 'application/x-gzip')).getDataAsString()); } catch (e) {}
+    }
+  }
+  var core = readCore_();
+  try {
+    var b64 = Utilities.base64Encode(Utilities.gzip(Utilities.newBlob(JSON.stringify(core), 'application/json')).getBytes());
+    var size = 90000, put = {}, m = Math.ceil(b64.length / size);
+    for (var j = 0; j < m; j++) put[CACHE_KEY + '_' + j] = b64.substr(j * size, size);
+    put[CACHE_KEY + '_n'] = String(m);
+    c.putAll(put, CACHE_SECS);
+  } catch (e) {}
+  return core;
+}
 function read_(me) {
+  var core = cachedCore_();
+  core.depts.forEach(function(d) {
+    var role = 'viewer';
+    if (CFG.admins.indexOf(me.email) >= 0) role = 'admin';
+    else if (d.access && d.access[me.email]) role = d.access[me.email];
+    d.role = role; d.canEdit = d.source !== 'rms' && (role === 'admin' || role === 'editor');
+    delete d.access;
+  });
+  core.ok = true; core.me = me; core.syncedAt = now_();
+  return core;
+}
+function readCore_() {
   var depts = [], reqs = [], team = [];
   CFG.depts.forEach(function(dept) {
     if (dept.key === 'sap') { var s = readSap_(); depts.push(s.dept); reqs = reqs.concat(s.reqs); team = team.concat(s.team); return; }
-    var ss = ss_(dept), st = settings_(ss), role = roleIn_(me, dept);
+    var ss = ss_(dept), st = settings_(ss), access = {};
+    values_(ss, 'Access').slice(1).forEach(function(a){ if (a[0]) access[String(a[0]).trim().toLowerCase()] = String(a[2] || 'viewer').trim().toLowerCase(); });
     var tm = values_(ss, 'Team').slice(1).filter(function(r){ return r[1]; }).map(function(r){ return { no:String(r[0]), name:String(r[1]).trim(), position:String(r[2] || ''), dept:dept.key }; });
     team = team.concat(tm);
     depts.push({ key:dept.key, name:st['Department'], sub:st['Description'], prefix:st['ID Prefix'], groupLabel:st['Group Label'] || 'Group',
       stages:list_(st['Stages']), typeLabel:st['Type Label'] || '', types:list_(st['Types']), people:tm.map(function(t){ return t.name; }),
-      source:'sheet', canEdit: role === 'admin' || role === 'editor', role:role });
+      source:'sheet', access:access });
     var rows = values_(ss, 'Requirements'), H = hdrIndex_(rows[0]);
     var byId = {};
     rows.slice(1).forEach(function(r) {
@@ -148,7 +183,7 @@ function read_(me) {
       q.history.push({ d:d_(h[0]), t:String(h[3]) + (h[2] ? ' (' + h[2] + ')' : '') });
     });
   });
-  return { ok:true, me:me, depts:depts, reqs:reqs, team:team, syncedAt:now_() };
+  return { depts:depts, reqs:reqs, team:team };
 }
 
 function readSap_() {
