@@ -476,6 +476,7 @@ const DEFAULT_DEPTS = [{"key": "propmax", "name": "PropMax", "sub": "Development
 function setData(data) {
   S.depts = data.depts; S.reqs = data.reqs; S.team = data.team; S.syncedAt = data.syncedAt; ME = data.me;
   S.reqs.forEach(r => { r.collab = r.collab || []; r.comments = r.comments || []; r.history = r.history || []; });
+  S.depts.forEach(d => { if (d.key === 'propmax') { if (!d.name || d.name === 'PropMax') d.name = 'Development'; if (/^Development · /.test(d.sub || '')) d.sub = 'In-house apps and integrations'; } });
   DEPTS = S.depts; DMAP = Object.fromEntries(DEPTS.map(d => [d.key, d]));
   POS = Object.fromEntries(S.team.map(t => [t.name, t.position])); LOADED = data.preview ? false : true;
 }
