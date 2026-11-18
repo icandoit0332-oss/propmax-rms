@@ -547,7 +547,8 @@ const stageColor = (d, i) => i === d.stages.length - 1 ? 'var(--s-green)' : i ==
 
 /* ---------- state & routing ---------- */
 const VIEWS = [['dashboard','Dashboard'],['pipeline','Pipeline'],['tasks','All Tasks'],['rankings','Rankings'],['calendar','Calendar']];
-const RANKED = ['sap', 'propmax', 'archtech'];
+const RANKED = ['sap']; // add 'propmax' / 'archtech' back once they have owners and completion dates
+const NO_RANK = ['sap', 'propmax', 'archtech']; // no rankings panel on the dashboard
 const viewsFor = k => VIEWS.filter(([v]) => v !== 'rankings' || RANKED.includes(k));
 let ui = {dept:'home', view:'dashboard', q:'', group:'', owner:'', prio:'', bucket:'', sort:{k:'target', d:1}, showAll:{}};
 function readHash() {
@@ -690,7 +691,7 @@ function dashboard(d, list, m) {
     <section class="pnl"><div class="pnl-h"><h3>Next due</h3><p>Open items by target date</p></div>
       <div class="tw">${up.length ? `<table><tbody>${up.map(r => `<tr class="row" data-open="${esc(r.id)}"><td class="mono nw">${esc(r.id)}</td><td>${esc(r.title)}<div class="subl">${esc(r.owner||'Unassigned')} · ${esc(r.stage)}</div></td><td class="r">${statusChip(r)}</td></tr>`).join('')}</tbody></table>` : '<div class="empty">No open items.</div>'}</div></section>
   </div>
-  ${RANKED.includes(d.key) ? '' : rankings(d, list)}
+  ${NO_RANK.includes(d.key) ? '' : rankings(d, list)}
   ${trends(d, list)}`;
 }
 
