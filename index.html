@@ -547,7 +547,8 @@ const stageColor = (d, i) => i === d.stages.length - 1 ? 'var(--s-green)' : i ==
 
 /* ---------- state & routing ---------- */
 const VIEWS = [['dashboard','Dashboard'],['pipeline','Pipeline'],['tasks','All Tasks'],['rankings','Rankings'],['calendar','Calendar']];
-const viewsFor = k => VIEWS.filter(([v]) => v !== 'rankings' || k === 'sap');
+const RANKED = ['sap', 'propmax', 'archtech'];
+const viewsFor = k => VIEWS.filter(([v]) => v !== 'rankings' || RANKED.includes(k));
 let ui = {dept:'home', view:'dashboard', q:'', group:'', owner:'', prio:'', bucket:'', sort:{k:'target', d:1}, showAll:{}};
 function readHash() {
   const h = (location.hash || '').slice(1), [d, v] = h.split('-');
@@ -626,7 +627,7 @@ function home() {
   </div>`;
 }
 
-const TITLES = {pipeline:['Pipeline Board','All requirements by stage · drag a card to move it'], dashboard:['Dashboard','Completion, deadlines and owner performance'], tasks:['All Tasks','Every requirement in one list'], rankings:['Team Rankings','SAP team performance on tasks, not hours'], calendar:['Calendar','Requirements by target date']};
+const TITLES = {pipeline:['Pipeline Board','All requirements by stage · drag a card to move it'], dashboard:['Dashboard','Completion, deadlines and owner performance'], tasks:['All Tasks','Every requirement in one list'], rankings:['Team Rankings','Team performance on tasks, not hours'], calendar:['Calendar','Requirements by target date']};
 function deptView(d) {
   const all = reqsOf(d.key), list = filtered(d), m = metrics(list);
   const groups = uniq(all.map(r => r.group)), owners = uniq(all.map(r => r.owner));
@@ -689,7 +690,7 @@ function dashboard(d, list, m) {
     <section class="pnl"><div class="pnl-h"><h3>Next due</h3><p>Open items by target date</p></div>
       <div class="tw">${up.length ? `<table><tbody>${up.map(r => `<tr class="row" data-open="${esc(r.id)}"><td class="mono nw">${esc(r.id)}</td><td>${esc(r.title)}<div class="subl">${esc(r.owner||'Unassigned')} · ${esc(r.stage)}</div></td><td class="r">${statusChip(r)}</td></tr>`).join('')}</tbody></table>` : '<div class="empty">No open items.</div>'}</div></section>
   </div>
-  ${d.key === 'sap' ? '' : rankings(d, list)}
+  ${RANKED.includes(d.key) ? '' : rankings(d, list)}
   ${trends(d, list)}`;
 }
 
@@ -742,28 +743,33 @@ function tasks(d, list) {
 }
 const teamOf = k => (S.team || []).filter(t => t.dept === k);
 const MIN_CLOSED = 5;
-function perfScore(m) {
-  if (m.done < MIN_CLOSED || m.onPct === null) return null;
+function perfScore(m, partial) {
+  if (m.done < MIN_CLOSED) return null;
   const control = m.total ? 100 * (1 - m.overdue / m.total) : 100;
+  if (m.onPct === null) return partial ? Math.round(0.6 * m.comp + 0.4 * control) : null;
   return Math.round(0.5 * m.onPct + 0.3 * m.comp + 0.2 * control);
 }
+const noDates = list => !list.some(r => isDone(r) && r.completedOn);
 function rankingsView(d, list) {
-  const top = uniq(list.map(r => r.owner)).map(o => { const m = metrics(list.filter(r => r.owner === o)); return {o, m, s: perfScore(m)}; })
+  const partial = noDates(reqsOf(d.key));
+  const top = uniq(list.map(r => r.owner)).map(o => { const m = metrics(list.filter(r => r.owner === o)); return {o, m, s: perfScore(m, partial)}; })
     .filter(x => x.s !== null).sort((a,b) => b.s - a.s || b.m.done - a.m.done).slice(0, 3);
   const medal = ['#c8961c','#8a99a8','#b4693a'];
-  return `${top.length ? `<div class="pod">${top.map((x, i) => `<button class="pd" type="button" data-owner="${esc(x.o)}" style="--md:${medal[i]}"><span class="pr">${i+1}</span><span class="av">${esc(initials(x.o))}</span><span class="pn"><b>${esc(x.o)}</b><span>${esc(POS[x.o]||'')}</span></span><span class="ps">${x.s}<small>score</small></span><span class="pm"><span><b>${x.m.onPct}%</b>on time</span><span><b>${x.m.comp}%</b>complete</span><span><b>${x.m.done}</b>closed</span><span><b class="${x.m.overdue?'red':''}">${x.m.overdue}</b>overdue</span></span></button>`).join('')}</div>` : ''}
+  return `${top.length ? `<div class="pod">${top.map((x, i) => `<button class="pd" type="button" data-owner="${esc(x.o)}" style="--md:${medal[i]}"><span class="pr">${i+1}</span><span class="av">${esc(initials(x.o))}</span><span class="pn"><b>${esc(x.o)}</b><span>${esc(POS[x.o]||'')}</span></span><span class="ps">${x.s}<small>score</small></span><span class="pm"><span><b>${x.m.onPct === null ? '—' : x.m.onPct + '%'}</b>on time</span><span><b>${x.m.comp}%</b>complete</span><span><b>${x.m.done}</b>closed</span><span><b class="${x.m.overdue?'red':''}">${x.m.overdue}</b>overdue</span></span></button>`).join('')}</div>` : ''}
+  ${partial ? `<div class="srcline"><span class="pill smp">Provisional</span> No completion dates are logged for ${esc(d.name)} yet, so on-time delivery is not scored. Until release dates are recorded the score is 60% completion + 40% overdue control.</div>` : ''}
   ${rankings(d, list)}
-  <section class="how2"><b>How the score works</b><span><b>50%</b> on-time delivery: closed on or before the target date</span><span><b>30%</b> completion: closed ÷ assigned</span><span><b>20%</b> overdue control: share of assigned items not overdue</span><span>Ranked once a person has ${MIN_CLOSED} or more closed requirements. Closures without an RMS completion date count toward completion but not on-time.</span></section>`;
+  <section class="how2"><b>How the score works</b><span><b>50%</b> on-time delivery: closed on or before the target date</span><span><b>30%</b> completion: closed ÷ assigned</span><span><b>20%</b> overdue control: share of assigned items not overdue</span><span>Ranked once a person has ${MIN_CLOSED} or more closed requirements. Closures without a completion date count toward completion but not on-time.</span></section>`;
 }
 function rankings(d, list) {
-  const all = uniq(list.map(r => r.owner)).map(o => { const m = metrics(list.filter(r => r.owner === o)); return {o, m, s: perfScore(m)}; });
+  const partial = noDates(reqsOf(d.key));
+  const all = uniq(list.map(r => r.owner)).map(o => { const m = metrics(list.filter(r => r.owner === o)); return {o, m, s: perfScore(m, partial)}; });
   const ranked = all.filter(x => x.s !== null).sort((a,b) => b.s - a.s || b.m.done - a.m.done);
   const unranked = all.filter(x => x.s === null).sort((a,b) => b.m.total - a.m.total);
   const idle = ui.owner ? [] : teamOf(d.key).filter(t => !all.some(x => x.o === t.name));
   const un = list.filter(r => !r.owner), unOpen = un.filter(r => !isDone(r)).length;
   const sc = s => `<div class="inbar"><div class="mtr"><b style="width:${s}%;background:${s>=80?'var(--s-green)':s>=60?'var(--s-amber)':'var(--crit)'}"></b></div><span class="mono" style="font-weight:600">${s}</span></div>`;
   const row = (x, i) => `<tr class="row" data-owner="${esc(x.o)}"><td>${i===null?'<span class="rk">–</span>':`<span class="rk ${i<3?'t'+(i+1):''}">${i+1}</span>`}</td><td class="own">${who(x.o)}<div class="subl">${esc(POS[x.o] || '')}</div></td><td>${x.s===null?`<span class="subl">${x.m.done < MIN_CLOSED ? `Fewer than ${MIN_CLOSED} closed` : 'No dated closures'}</span>`:sc(x.s)}</td><td class="r num">${x.m.onPct===null?'—':x.m.onPct+'%'}</td><td class="r num">${x.m.comp}%</td><td class="r num" style="color:${x.m.overdue?'var(--crit)':'inherit'}">${x.m.overdue}</td><td class="r num">${x.m.total}</td><td class="r num">${x.m.done}</td><td class="r num">${x.m.open}</td><td class="r num">${x.m.cycle===null?'—':x.m.cycle+'d'}</td></tr>`;
-  return `<section class="pnl"><div class="pnl-h"><h3>Team rankings</h3><p>Score = 50% on-time delivery + 30% completion + 20% overdue control · ranked from ${MIN_CLOSED} closed requirements</p>${un.length?`<span class="sp"></span><span class="ch st warn">${un.length} unassigned${unOpen?` · ${unOpen} open`:''}</span>`:''}</div>
+  return `<section class="pnl"><div class="pnl-h"><h3>Team rankings</h3><p>${partial ? 'Provisional score = 60% completion + 40% overdue control (no completion dates yet)' : 'Score = 50% on-time delivery + 30% completion + 20% overdue control'} · ranked from ${MIN_CLOSED} closed requirements</p>${un.length?`<span class="sp"></span><span class="ch st warn">${un.length} unassigned${unOpen?` · ${unOpen} open`:''}</span>`:''}</div>
     <div class="tw"><table class="rkt"><thead><tr><th>#</th><th>Owner</th><th>Score</th><th class="r">On time</th><th class="r">Completion</th><th class="r">Overdue</th><th class="r">Assigned</th><th class="r">Closed</th><th class="r">Open</th><th class="r">Avg cycle</th></tr></thead><tbody>
     ${ranked.map((x, i) => row(x, i)).join('')}
     ${unranked.map(x => row(x, null)).join('')}
