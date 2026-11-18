@@ -415,6 +415,9 @@ a.file:hover{border-color:var(--brand)}
 .field.full{grid-column:1/-1}
 .field input,.field select,.field textarea{background:var(--surface);border:1.5px solid var(--line);border-radius:10px;padding:8px 10px}
 .field input:focus,.field select:focus,.field textarea:focus{border-color:var(--brand);outline:none}
+.pw{position:relative;display:flex}.pw input{flex:1;padding-right:64px}
+.pw button{position:absolute;right:6px;top:50%;transform:translateY(-50%);border:0;background:none;color:var(--brand);font:600 12.5px var(--f-b,inherit);padding:4px 8px;border-radius:6px;cursor:pointer}
+.pw button:hover{background:var(--brand-soft)}
 .field textarea{min-height:72px;resize:vertical}
 .kv{display:grid;grid-template-columns:130px 1fr;gap:7px 10px;font-size:14px;background:var(--soft);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
 .kv span{color:var(--muted)}
@@ -446,7 +449,7 @@ a.file:hover{border-color:var(--brand)}
   <div class="in-c"><span class="in-t" style="width:48px;height:48px;font-size:17px;border-radius:12px">PM</span><div class="in-w"><b>IMARAT GROUP</b><small>PropMax Requirement Management System</small></div></div>
   <h2>Sign in</h2><p class="mut">Use the same account as the SAP RMS. New to PropMax? Enter your work email and a password, then Create account.</p>
   <div class="field"><label for="lEmail">Work email</label><input id="lEmail" type="email" autocomplete="username" placeholder="name@imarat.com.pk"></div>
-  <div class="field"><label for="lPass">Password</label><input id="lPass" type="password" autocomplete="current-password" placeholder="Password"></div>
+  <div class="field"><label for="lPass">Password</label><div class="pw"><input id="lPass" type="password" autocomplete="current-password" placeholder="Password"><button type="button" id="lShow" aria-label="Show password" aria-pressed="false">Show</button></div></div>
   <div class="lErr" id="lErr" role="alert"></div>
   <button class="btn primary" type="button" id="lIn" style="width:100%;padding:11px">Sign in</button>
   <div class="lrow"><button class="lnk" type="button" id="lUp">Create account</button><button class="lnk" type="button" id="lReset">Forgot password?</button></div>
@@ -1131,6 +1134,8 @@ function initAuth() {
   setTimeout(() => { el.classList.add('out'); lastView = null; render(); setTimeout(() => el.remove(), 500); }, 1150);
 })();
 initAuth();
+
+(function(){var b=document.getElementById('lShow'),p=document.getElementById('lPass');if(!b||!p)return;b.onclick=function(){var show=p.type==='password';p.type=show?'text':'password';b.textContent=show?'Hide':'Show';b.setAttribute('aria-pressed',show);b.setAttribute('aria-label',show?'Hide password':'Show password');p.focus();};})();
 </script>
 </body>
 </html>
